@@ -1,0 +1,80 @@
+FROM alpine:3.13.2 AS builder
+
+ENV http_proxy http://192.168.1.1:8080
+ENV HTTPS_PROXY http://192.168.1.1:8080
+
+ENV GIT_SSL_NO_VERIFY true
+
+ENV NGINX_VERSION 1.19.8
+
+WORKDIR /tmp
+
+COPY all-v2.23.sh .
+RUN ash all-v2.23.sh
+
+
+RUN apk add --no-cache --update --virtual .build-deps gcc libc-dev make openssl-dev pcre-dev zlib-dev linux-headers patch curl git tzdata pcre zlib libssl1.1
+
+RUN git clone https://github.com/chobits/ngx_http_proxy_connect_module.git
+
+
+ENV CONFIG "\
+		--prefix=/etc/nginx \
+		--sbin-path=/usr/sbin/nginx \
+		--modules-path=/usr/lib/nginx/modules \
+		--conf-path=/etc/nginx/nginx.conf \
+		--error-log-path=/var/log/nginx/error.log \
+		--http-log-path=/var/log/nginx/access.log \
+		--with-http_ssl_module \
+		--with-http_realip_module \
+		--with-http_addition_module \
+		--with-http_sub_module \
+		--with-http_gunzip_module \
+		--with-http_gzip_static_module \
+		--with-http_random_index_module \
+		--with-http_secure_link_module \
+		--with-http_stub_status_module \
+		--with-http_auth_request_module \
+		--with-threads \
+		--with-stream \
+		--with-stream_ssl_module \
+		--with-stream_ssl_preread_module \
+		--with-stream_realip_module \
+		--with-http_slice_module \
+		--with-compat \
+		--with-file-aio \
+		--with-http_v2_module \
+	"
+
+RUN  curl http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz -o nginx-$NGINX_VERSION.tar.gz \
+    && tar -xzvf nginx-$NGINX_VERSION.tar.gz \
+    && cd nginx-$NGINX_VERSION \
+    &&  patch -p1 < ../ngx_http_proxy_connect_module/patch/proxy_connect_rewrite_1018.patch \
+    && ./configure $CONFIG --add-module=../ngx_http_proxy_connect_module \
+    && make && make install
+
+RUN strip /usr/lib/nginx/modules/ngx_http_proxy_connect_module.so
+RUN strip /usr/sbin/nginx
+
+FROM nginx:1.19.8-alpine
+USER root
+COPY --from=builder /usr/local/nginx/sbin/nginx /usr/sbin
+COPY --from=builder /tmp/nginx-1.19.8/objs/addon/ngx_http_proxy_connect_module.o /usr/lib/nginx/modules/ngx_http_proxy_connect_module.so
+RUN chmod a+x /usr/lib/nginx/modules/ngx_http_proxy_connect_module.so
+RUN chmod a+x /usr/sbin/nginx
+WORKDIR /tmp
+COPY all-v2.23.sh .
+RUN ash all-v2.23.sh
+COPY add-capabilities-to-alpine.sh .
+RUN ash add-capabilities-to-alpine.sh CAP_NET_BIND_SERVICE+ep /usr/sbin/nginx
+WORKDIR /var/log/nginx
+RUN  ln -s /dev/stdout postdata.log
+WORKDIR /etc/nginx
+COPY intezer-protect.proxy.local.pem .
+COPY intezer-protect.proxy.local.key .
+RUN mkdir -p /var/cache/nginx
+RUN chown -R nginx:nginx /var/cache/nginx
+RUN chown -R nginx:nginx /var/log/nginx
+RUN chown -R nginx:nginx /etc/nginx
+USER nginx
+CMD ["nginx", "-g", "daemon off;"]

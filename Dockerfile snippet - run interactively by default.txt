@@ -1,0 +1,7 @@
+RUN useradd -d /home/user \
+    -s /bin/bash \
+    -ms /bin/bash user
+    
+# run interactive shell
+# with user privileges
+CMD ["su", "-", "user"]

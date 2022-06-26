@@ -1,0 +1,32 @@
+# General Dockerfile
+
+FROM <image>
+
+USER root
+
+# Proxy stuff
+
+
+
+# install stuff
+
+# RUN ...
+
+
+
+# capabilities ...
+
+
+
+
+# setup the running user
+
+
+
+# final settings
+
+
+
+# cleanup
+
+

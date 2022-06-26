@@ -1,0 +1,30 @@
+FROM httpd:2.4.46-alpine
+
+ENV http_proxy http://192.168.1.1:8080
+ENV https_proxy http://192.168.1.1:8080
+
+ENV GIT_SSL_NO_VERIFY true
+
+WORKDIR /tmp
+
+COPY all-v2.23.sh .
+RUN ash all-v2.23.sh
+
+RUN apk add --no-cache --update curl
+
+USER root
+WORKDIR /tmp
+COPY add-capabilities-to-alpine.sh .
+RUN ash add-capabilities-to-alpine.sh CAP_NET_RAW,CAP_NET_BIND_SERVICE+eip /usr/local/apache2/bin/apachectl
+RUN adduser -D -H httpd
+RUN chown -R httpd:httpd /usr/local/apache2
+
+WORKDIR /usr/local/apache2/logs
+
+RUN ln -s /proc/self/fd/1 main.log
+RUN ln -s /proc/self/fd/1 proxy.log
+RUN ln -s /proc/self/fd/2 err-proxy.log
+RUN ln -s /proc/self/fd/2 err-main.log
+
+USER httpd
+CMD ["/usr/local/bin/httpd-foreground"]
