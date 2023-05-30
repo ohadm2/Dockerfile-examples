@@ -1,0 +1,43 @@
+FROM ubuntu:20.04
+
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt update && apt-get -y install tzdata
+RUN apt install make gcc pkg-config autoconf automake libtool-bin libtool git m4 flex autoconf-archive libsystemd-dev libusb-1.0-0-dev libudev-dev libpcsclite-dev -y
+
+WORKDIR /tmp
+
+RUN git clone https://salsa.debian.org/rousseau/PCSC.git
+
+WORKDIR /tmp/PCSC
+
+RUN autoreconf -fi
+
+RUN ./configure
+
+RUN make
+RUN make install
+
+#RUN ./bootstrap
+#RUN ./configure
+#RUN make
+
+WORKDIR /tmp/PCSC
+
+RUN echo 
+
+COPY replace-files.sh .
+
+RUN chmod +x ./replace-files.sh && ./replace-files.sh
+
+RUN git clone https://github.com/OpenSC/OpenSC.git
+
+WORKDIR OpenSC
+
+RUN autoreconf -fi
+
+RUN ./configure
+
+RUN make
+RUN make install
+
+
+

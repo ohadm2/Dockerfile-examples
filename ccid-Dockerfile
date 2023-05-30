@@ -1,0 +1,32 @@
+FROM ubuntu:20.04
+
+#FROM ubuntu:22.10
+
+WORKDIR /tmp
+
+COPY ccid-1.5.2.tar.bz2 .
+
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt update && apt-get -y install tzdata
+
+RUN apt update && apt install libusb-1.0-0-dev libusb-1.0-0 make gcc libpcsclite-dev pkg-config -y
+
+RUN dpkg -l libpcsclite-dev libc6 && dpkg -L libpcsclite-dev
+
+RUN tar xvf ccid-1.5.2.tar.bz2
+
+WORKDIR ccid-1.5.2
+
+#RUN ./configure PCSC_CFLAGS=-I/usr/include/PCSC PCSC_LIBS="-L/usr/lib/x86_64-linux-gnu -lpcsclite" LIBUSB_CFLAGS=-I/usr/include/libusb-1.0 LIBUSB_LIBS=-lusb-1.0 --enable-usbdropdir=/usr/lib/pcsc/drivers/
+
+RUN ./configure
+
+RUN make
+RUN make install
+
+RUN find
+
+#RUN dpkg -l pcscd pcsc-tools libpcsclite-dev
+
+#RUN dpkg -L pcscd pcsc-tools libpcsclite-dev
+
+#RUN pkcs11-tool --module /usr/lib/x86_64-linux-gnu/libpcsclite.so -L

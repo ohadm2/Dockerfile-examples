@@ -1,0 +1,28 @@
+FROM ubuntu:20.04
+
+#FROM ubuntu:22.10
+
+WORKDIR /tmp
+
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt update && apt-get -y install tzdata
+
+#RUN apt update && apt install libusb-1.0-0-dev libusb-1.0-0 make gcc libpcsclite-dev pkg-config -y
+
+#RUN dpkg -l libpcsclite-dev libc6 && dpkg -L libpcsclite-dev
+
+RUN apt update && apt install gcc autoconf automake libtool-bin pkg-config m4 make git libpcsclite-dev libudev-dev -y
+
+RUN git clone https://github.com/libusb/libusb.git
+
+WORKDIR libusb
+
+
+RUN autoreconf -fi
+
+RUN ./configure
+
+RUN make
+RUN make install
+
+RUN find
+
