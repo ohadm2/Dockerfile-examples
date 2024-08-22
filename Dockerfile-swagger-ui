@@ -1,0 +1,8 @@
+FROM swaggerapi/swagger-ui:latest
+
+COPY swagger.json .
+
+ENV SWAGGER_JSON /swagger.json
+
+
+
