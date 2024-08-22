@@ -1,0 +1,32 @@
+FROM nginx:stable-bullseye
+
+WORKDIR /app
+
+
+# hosts file structure example:
+#127.0.0.1       localhost my.first.link.org
+#127.0.0.1       my.second.link.org
+
+# other-links.txt file structure example:
+#Try It PHP>>>https://www.w3schools.com/php/phptryit.asp?filename=tryphp_intro
+#REGEX Tester>>>https://regex101.com
+
+COPY hosts .
+COPY other-links.txt .
+
+RUN echo "<HTML><HEAD><title>Links</title></HEAD><BODY>" > /usr/share/nginx/html/index.html && echo "<h4>Hosts list / Main Sites URLs: </h4>" >> /usr/share/nginx/html/index.html 
+
+RUN cat hosts | grep gov.il | awk '{if($2 != "") {print $2}}' | sed 's#\(.*\)#<a href="http://\1" target=\"_blank\">\1</a><br>#' >> /usr/share/nginx/html/index.html
+RUN cat hosts | grep gov.il | awk '{if($3 != "") {print $3}}' | sed 's#\(.*\)#<a href="http://\1" target=\"_blank\">\1</a><br>#' >> /usr/share/nginx/html/index.html
+
+RUN echo "<h4>Other Sites \ Tools URLs: </h4>" >> /usr/share/nginx/html/index.html
+
+RUN cat other-links.dat | awk -F">>>" '{print "<a href=\""$2"\" target=\"_blank\">"$1"</a><br>"}' >> /usr/share/nginx/html/index.html
+
+#RUN echo "<h4>IP address: </h4>" >> /usr/share/nginx/html/index.html && hostname -I >> /usr/share/nginx/html/index.html && echo "</BODY></HTML>" >> /usr/share/nginx/html/index.html
+
+ENTRYPOINT [ "/docker-entrypoint.sh" ]
+
+EXPOSE 80
+
+CMD [ "/usr/sbin/nginx", "-g", "daemon off;" ]
