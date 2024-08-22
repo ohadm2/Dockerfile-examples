@@ -1,0 +1,121 @@
+# this file is NOT working perfectly! the cert req pops up but the connection to user privs is still not configured correctly meaning that even when using a valid cert the user does not get the page
+FROM ubuntu:20.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CATALINA_HOME /usr/local/tomcat
+ENV PATH $CATALINA_HOME/bin:$PATH
+
+RUN apt update && apt install libengine-pkcs11-openssl opensc pcscd nano strace openjdk-11-jdk wget curl gnutls-bin libtcnative-1 firefox -y
+
+# Specify the Tomcat version
+ENV TOMCAT_VERSION 9.0.90
+
+# Download and install Tomcat
+RUN wget https://downloads.apache.org/tomcat/tomcat-9/v${TOMCAT_VERSION}/bin/apache-tomcat-${TOMCAT_VERSION}.tar.gz && \
+    tar xzf apache-tomcat-${TOMCAT_VERSION}.tar.gz && \
+    mv apache-tomcat-${TOMCAT_VERSION} $CATALINA_HOME && \
+    rm apache-tomcat-${TOMCAT_VERSION}.tar.gz
+
+# Set permissions
+RUN chmod +x $CATALINA_HOME/bin/*.sh
+
+# Copy your keystore file to the container
+COPY sm-certs.jks /usr/local/tomcat/conf/sm-certs.jks
+COPY site-cert.jks /usr/local/tomcat/conf/site-cert.jks
+
+COPY my-ca-certs.txt /
+RUN cat my-ca-certs.txt >> /etc/ssl/certs/ca-certificates.crt
+
+COPY subCa_chain.pem /
+RUN cat subCa_chain.pem >> /etc/ssl/certs/ca-certificates.crt
+
+# taken from the "id protect" installation pkg for linux
+COPY libASEP11.so /usr/lib/x86_64-linux-gnu/pkcs11/libASEP11.so
+
+# Configure server.xml to enable SSL and enforce clientAuth
+#RUN sed -i 's|</Service>|<Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" SSLEnabled="true" scheme="https" secure="true" keystoreFile="/usr/local/tomcat/conf/my-keystore.jks" keystoreType="jks" keystorePass="changeit" clientAuth="true" sslProtocol="TLS" SSLVerifyClient="require" SSLVerifyDepth="10" keyAlias="tomcat" />\n&|' /usr/local/tomcat/conf/server.xml
+
+# not working from dockerfile
+#RUN pcscd
+
+RUN echo '[openssl_def]\nengines = engine_section\n[engine_section]\npkcs11 = pkcs11_section\n[ pkcs11_section ]\nengine_id = pkcs11\nMODULE_PATH = /usr/lib/x86_64-linux-gnu/pkcs11/libASEP11.so\ninit = 0' >> /usr/lib/ssl/openssl.cnf
+
+
+RUN echo 'module: libASEP11.so' > /usr/share/p11-kit/modules/idprotect-pkcs11.module
+
+
+#RUN sed -i 's|</Service>|<Connector port="8443" protocol="HTTP/1.1" truststoreFile="/usr/local/tomcat/conf/my-keystore.jks" truststorePass="changeit" clientAuth="true" sslProtocol="TLS" />\n&|' /usr/local/tomcat/conf/server.xml
+
+
+# sslImplementationName="org.apache.tomcat.util.net.openssl.OpenSSLImplementation" 
+
+RUN sed -i 's|</Service>|<Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" sslImplementationName="org.apache.tomcat.util.net.jsse.JSSEImplementation" SSLEnabled="true" scheme="https" secure="true" keystoreFile="/usr/local/tomcat/conf/site-cert.jks" keystorePass="changeit" \
+truststoreFile="/usr/local/tomcat/conf/sm-certs.jks" truststorePass="changeit" clientAuth="true" sslProtocol="TLSv1.2" sslEnabledProtocols="TLSv1.2" />\n&|' /usr/local/tomcat/conf/server.xml
+
+
+RUN sed -i 's/SSLEngine="on"/& useAprConnector="false" useOpenSSL="false" /' /usr/local/tomcat/conf/server.xml
+
+RUN sed -i 's|</Realm>|&\n<Realm className="org.apache.catalina.realm.MemoryRealm" />|' /usr/local/tomcat/conf/server.xml
+
+
+# Expose the HTTPS port
+EXPOSE 8443
+
+# Create a basic web application
+RUN mkdir -p /usr/local/tomcat/webapps/ROOT/WEB-INF
+
+# Create a simple web.xml file
+#RUN echo '<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd" version="3.1"> \
+#<servlet> \
+#    <servlet-name>default</servlet-name> \
+#    <jsp-file>/index.jsp</jsp-file> \
+#</servlet> \
+#<servlet-mapping> \
+#    <servlet-name>default</servlet-name> \
+#    <url-pattern>/</url-pattern> \
+#</servlet-mapping> \
+#</web-app>' > /usr/local/tomcat/webapps/ROOT/WEB-INF/web.xml
+
+# Create a simple web.xml file with security constraints
+RUN echo '<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee" \
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" \
+         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee \
+         http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd" version="3.1"> \
+  <security-constraint> \
+    <web-resource-collection> \
+      <web-resource-name>Protected Area</web-resource-name> \
+      <url-pattern>/*</url-pattern> \
+    </web-resource-collection> \
+    <auth-constraint> \
+      <role-name>sso</role-name> \
+    </auth-constraint> \
+    <user-data-constraint> \
+      <transport-guarantee>CONFIDENTIAL</transport-guarantee> \
+    </user-data-constraint> \
+  </security-constraint> \
+  <login-config> \
+    <auth-method>CLIENT-CERT</auth-method> \
+  </login-config> \
+  <security-role> \
+    <role-name>sso</role-name> \
+  </security-role> \
+</web-app>' > /usr/local/tomcat/webapps/ROOT/WEB-INF/web.xml
+
+
+RUN sed -i 's|</tomcat-users>|<role rolename="sso" /><user username="CN=myCN,OU=myOU,O=myO,C=IL" password="" roles="sso" />&|' /usr/local/tomcat/conf/tomcat-users.xml
+
+# Create a simple index.jsp file
+RUN echo '<html><body><h1>Hello, Tomcat!</h1></body></html>' > /usr/local/tomcat/webapps/ROOT/index.jsp
+
+#RUN echo "127.0.0.1  my.site.local" >> /etc/hosts2 #&& cp /etc/hosts2 /etc/hosts
+
+
+RUN echo 'org.apache.catalina.authenticator.level = FINEST\norg.apache.catalina.realm.level = FINEST\njavax.net.ssl.level = FINEST\njava.util.logging.ConsoleHandler.level = ALL\norg.apache.catalina.level = FINEST\norg.apache.catalina.realm.MemoryRealm.level = FINEST\norg.apache.catalina.realm.MemoryRealm.useParentHandlers = trueorg.apache.catalina.realm.level = ALL\norg.apache.catalina.realm.useParentHandlers = true\norg.apache.catalina.authenticator.level = ALL\norg.apache.catalina.authenticator.useParentHandlers = true' >> /usr/local/tomcat/conf/logging.properties
+
+
+# Start Tomcat
+CMD ["catalina.sh", "run"]
+
+
+
