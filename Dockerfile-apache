@@ -1,0 +1,22 @@
+# Use the official PHP Apache image as the base image
+FROM php:8.1-apache
+
+# Copy the index.php file from the current directory to the Apache document root
+COPY index.php /var/www/html/
+COPY adminer.php /var/www/html/
+COPY plugin.php /var/www/html/
+#COPY ServerList.php /var/www/html/
+#COPY login-servers.php /var/www/html/
+COPY login-servers-enhanced.php /var/www/html/
+
+
+
+# Expose port 80
+EXPOSE 80
+
+# Optionally, you can enable any required Apache modules here
+RUN docker-php-ext-install mysqli pdo pdo_mysql
+
+# The default command is to run Apache in the foreground
+CMD ["apache2-foreground"]
+
